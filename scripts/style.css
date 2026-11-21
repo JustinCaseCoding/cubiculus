@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 /* ==========================================================================
    CUBICULUS // AUTHENTIC MINECRAFT JAVA EDITION DESIGN SYSTEM
    ========================================================================== */
@@ -867,6 +869,10 @@ body {
     justify-content: center;
     z-index: 130;
     padding: 16px;
+}
+
+.hidden {
+    display: none !important;
 }
 
 .mc-options-window {
