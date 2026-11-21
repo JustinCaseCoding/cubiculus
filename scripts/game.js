@@ -82,10 +82,6 @@ function initGame() {
     if (GameSettings.fogEnabled) updateFog(GameSettings.renderDistance);
     else if (scene) scene.fog = null;
 
-    if (window.SimplexNoise) {
-        setSimplex(new window.SimplexNoise());
-    }
-
     initInventory();
 
     // Initialize sub-modules

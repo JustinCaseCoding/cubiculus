@@ -21,14 +21,15 @@ const WATER_FACE_DIR = [
     [1, 0], [-1, 0], [0, 0], [0, 0], [0, 1], [0, -1]
 ];
 
-// Corner height for a water side face.
-//
-// edge == 1 is the top corner and sits on our own surface. edge == 0 is the bottom
-// corner and sits on the neighbour's surface, which is sideDrop lower. topDrop is
-// deliberately NOT applied to the bottom corner: applying it dropped the face deep
-// into the ground, which is what produced the visible edges on every water step.
-function waterSideY(edge, topDrop = 0, sideDrop = 0) {
-    return edge === 0 ? 1 - topDrop - sideDrop : 1 - topDrop;
+// Corner Y offset in [0..1] for a transparent block face.
+// Non-water blocks (leaves, glass, ice, etc.) always use the unit cube corner directly.
+// Water blocks lower their top edge by topDrop and, for water-to-water steps,
+// place their bottom edge at the neighbour's surface (bottomY).
+function transCornerY(isWater, faceIdx, cornerY, topDrop, bottomY) {
+    if (!isWater) return cornerY;
+    if (faceIdx === 2) return 1 - topDrop;
+    if (faceIdx === 3) return 0;
+    return cornerY === 1 ? (1 - topDrop) : bottomY;
 }
 
 // World-space Y of a water block's surface: the block ceiling minus 1/8 of a
@@ -487,34 +488,33 @@ export function buildChunkMesh(cx, cz) {
                                                     // y + 1 - level/8, and the 1/8 steps between neighbours are
                                                     // covered by side faces. That is what Minecraft does, and it
                                                     // cannot ripple because nothing is averaged.
+                                                    const isWater = type === BLOCKS.WATER;
                                                     let topDrop = 0;
-                                                    let sideDrop = 0;
-                                                    if (type === BLOCKS.WATER) {
+                                                    let bottomY = 0;
+                                                    if (isWater) {
                                                         const mine = waterSurfaceY(gx, y, gz);
+                                                        topDrop = (y + 1) - mine;
 
                                                         if (f === 2) {
-                                                            // our top face sits level/8 below the block ceiling
-                                                            topDrop = (y + 1) - mine;
-
-                                                            // hide it when the neighbour reaches at least as high
                                                             if (neighbor === BLOCKS.WATER) {
-                                                                const nOff = WATER_FACE_DIR[f];
-                                                                const theirs = waterSurfaceY(
-                                                                    gx + nOff[0], y, gz + nOff[1]
-                                                                );
-                                                                if (theirs >= mine - 0.0001) emitFace = false;
+                                                                emitFace = false;
+                                                            } else if (topDrop > 0.0001) {
+                                                                emitFace = true;
                                                             }
+                                                        } else if (f === 3) {
+                                                            if (neighbor === BLOCKS.WATER) emitFace = false;
                                                         } else if (neighbor === BLOCKS.WATER) {
                                                             // A side face spans from the neighbour's surface up to
-                                                            // ours. Equal surfaces need no face at all.
+                                                            // ours. Equal or lower surfaces need no face at all.
                                                             const nOff = WATER_FACE_DIR[f];
                                                             const theirs = waterSurfaceY(
                                                                 gx + nOff[0], y, gz + nOff[1]
                                                             );
-                                                            if (Math.abs(mine - theirs) < 0.0001) {
-                                                                emitFace = false;
+                                                            if (mine > theirs + 0.0001) {
+                                                                emitFace = true;
+                                                                bottomY = theirs - y;
                                                             } else {
-                                                                sideDrop = mine - theirs;
+                                                                emitFace = false;
                                                             }
                                                         }
                                                     }
@@ -547,7 +547,7 @@ export function buildChunkMesh(cx, cz) {
                         const baseV = tVerts;
                         // Corner 0
                         sTransPos[tPos++] = gx + corners[0][0];
-                        sTransPos[tPos++] = y + waterSideY(corners[0][1], topDrop, sideDrop);
+                        sTransPos[tPos++] = y + transCornerY(isWater, f, corners[0][1], topDrop, bottomY);
                         sTransPos[tPos++] = gz + corners[0][2];
                         sTransNorm[tNorm++] = normX; sTransNorm[tNorm++] = normY; sTransNorm[tNorm++] = normZ;
                         sTransUv[tUv++] = u0; sTransUv[tUv++] = v0;
@@ -556,7 +556,7 @@ export function buildChunkMesh(cx, cz) {
 
                         // Corner 1
                         sTransPos[tPos++] = gx + corners[1][0];
-                        sTransPos[tPos++] = y + waterSideY(corners[1][1], topDrop, sideDrop);
+                        sTransPos[tPos++] = y + transCornerY(isWater, f, corners[1][1], topDrop, bottomY);
                         sTransPos[tPos++] = gz + corners[1][2];
                         sTransNorm[tNorm++] = normX; sTransNorm[tNorm++] = normY; sTransNorm[tNorm++] = normZ;
                         sTransUv[tUv++] = u1; sTransUv[tUv++] = v0;
@@ -565,7 +565,7 @@ export function buildChunkMesh(cx, cz) {
 
                         // Corner 2
                         sTransPos[tPos++] = gx + corners[2][0];
-                        sTransPos[tPos++] = y + waterSideY(corners[2][1], topDrop, sideDrop);
+                        sTransPos[tPos++] = y + transCornerY(isWater, f, corners[2][1], topDrop, bottomY);
                         sTransPos[tPos++] = gz + corners[2][2];
                         sTransNorm[tNorm++] = normX; sTransNorm[tNorm++] = normY; sTransNorm[tNorm++] = normZ;
                         sTransUv[tUv++] = u1; sTransUv[tUv++] = v1;
@@ -574,7 +574,7 @@ export function buildChunkMesh(cx, cz) {
 
                         // Corner 3
                         sTransPos[tPos++] = gx + corners[3][0];
-                        sTransPos[tPos++] = y + waterSideY(corners[3][1], topDrop, sideDrop);
+                        sTransPos[tPos++] = y + transCornerY(isWater, f, corners[3][1], topDrop, bottomY);
                         sTransPos[tPos++] = gz + corners[3][2];
                         sTransNorm[tNorm++] = normX; sTransNorm[tNorm++] = normY; sTransNorm[tNorm++] = normZ;
                         sTransUv[tUv++] = u0; sTransUv[tUv++] = v1;
